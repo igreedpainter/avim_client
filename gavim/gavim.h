@@ -35,6 +35,10 @@ public:
 	~gavim();
 
 	QString getMessage();
+
+protected:
+	void closeEvent(QCloseEvent *event);
+
 private:
 	Ui::gavimClass ui;
 	boost::asio::io_service io_service_;

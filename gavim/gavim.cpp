@@ -31,14 +31,14 @@ recvThread::~recvThread()
 
 void recvThread::run()
 {
-	qDebug() << "recv_thread::run()";
+	qDebug() << "recv_thread::run() start!";
 
 	OpenSSL_add_all_algorithms();
 	boost::shared_ptr<BIO> keyfile(BIO_new_file("test.key", "r"), BIO_free);
 	if (!keyfile)
 	{
 		qDebug() << "can not open test.key";
-		//exit(1);
+		return;
 	}
 	RSA * rsa_key = PEM_read_bio_RSAPrivateKey(keyfile.get(), 0, (pem_password_cb*)pass_cb, (void*) "test.key");
 
@@ -46,7 +46,7 @@ void recvThread::run()
 	if (!certfile)
 	{
 		qDebug() << "can not open avim.crt";
-		//exit(1);
+		return;
 	}
 	X509 * x509_cert = PEM_read_bio_X509(certfile.get(), 0, 0, 0);
 	certfile.reset();
@@ -70,6 +70,7 @@ void recvThread::run()
 	// 开协程异步接收消息
 	boost::asio::spawn(io_service_, boost::bind(&recvThread::recv_msg, this, _1));
 	io_service_.run();
+	qDebug() << "recv_thread::run() return!";
 }
 
 void recvThread::recv_msg(boost::asio::yield_context yield_context)
@@ -100,12 +101,10 @@ gavim::gavim(QWidget *parent)
 gavim::~gavim()
 {
 	qDebug() << "~gavim()";
-	io_service_.stop();
 }
 
 QString gavim::getMessage()
 {
-	//QString msg = ui.messageTextEdit->toHtml();
 	QString msg = ui.messageTextEdit->toPlainText();
 	ui.messageTextEdit->clear();
 	ui.messageTextEdit->setFocus();
@@ -114,12 +113,9 @@ QString gavim::getMessage()
 
 void gavim::on_sendButton_clicked()
 {
-	qDebug() << "on_sendButton_clicked()";
-
 	if (ui.messageTextEdit->toPlainText() == "")
 	{
-		//QMessageBox::warning(0, tr("警告"), tr("发送内容不能为空"), QMessageBox::Ok);
-		qDebug() << "cant not send null!";
+		qDebug() << "Can not send null text!";
 		return;
 	}
 	ui.messageBrowser->verticalScrollBar()->setValue(ui.messageBrowser->verticalScrollBar()->maximum());
@@ -128,24 +124,29 @@ void gavim::on_sendButton_clicked()
 	// 进入 IM 过程，发送一个 test  到 test2@avplayer.org
 	boost::async(
 		[this,curMsg](){
-		qDebug() << "send_msg()" << QString::fromStdString(curMsg);
-		//avcore_.sendto("test@avplayer.org", "test, me are testing you stupid avim");
-		avcore_.sendto("test@avplayer.org", curMsg);
+		std::string target_addr = "test@avplayer.org";
+		qDebug() << "sendMsg" << QString::fromStdString(target_addr) << " : " << QString::fromStdString(curMsg);
+		avcore_.sendto(target_addr, curMsg);
 	}
 	);
 }
 
 void gavim::on_exitButton_clicked()
 {
-	qDebug() << "on_exitButton_clicked()";
+	this->close();
 }
 
 void gavim::recvHandle(const QString &sender, const QString &data)
 {
-	qDebug() << "handleResults()" << sender << " send: " << data;
+	qDebug() << "recvMsg" << sender << " : " << data;
 	QString time = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
 	ui.messageBrowser->setTextColor(Qt::blue);
 	ui.messageBrowser->setCurrentFont(QFont("Times New Roman", 12));
 	ui.messageBrowser->append("[" + sender + "]" + time);
 	ui.messageBrowser->append(data);
+}
+
+void gavim::closeEvent(QCloseEvent *event)
+{
+	io_service_.stop();
 }
